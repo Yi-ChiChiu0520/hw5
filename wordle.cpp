@@ -1,81 +1,54 @@
+#include "wordle.h"
+#include "dict-eng.h"  // Ensure you have this header for dictionary definitions
 #include <iostream>
+#include <vector>
 #include <set>
 #include <string>
-#include <vector>
 #include <algorithm>
-#include <map>
 
 using namespace std;
 
-// Helper function prototypes
-void generate(int pos, string &current, const string &fixed, const map<char, int> &floatingOriginal, map<char, int> &floatingRemaining, const set<string> &dict, set<string> &results);
-
-// Main wordle function
-set<string> wordle(const string& in, const string& floating, const set<string>& dict) {
-    string current = string(in.size(), ' ');  // Placeholder for current word being built
-    map<char, int> floatingCounts;  // Counts of each floating letter
-    
-    // Count each floating letter
-    for (char ch : floating) {
-        floatingCounts[ch]++;
-    }
-
-    // Prepare results set
-    set<string> results;
-
-    // Start the recursive generation
-    generate(0, current, in, floatingCounts, floatingCounts, dict, results);
-
-    return results;
-}
-
-// Recursive function to generate valid words
-void generate(int pos, string &current, const string &fixed, const map<char, int> &floatingOriginal, map<char, int> &floatingRemaining, const set<string> &dict, set<string> &results) {
-    if (pos == fixed.size()) {  // Base case: when the word is fully constructed
-        if (dict.find(current) != dict.end()) {  // Check if the word is in the dictionary
-            results.insert(current);
+void generateWords(const string& in, string& currentWord, vector<int>& floatingCount, const set<string>& dict, set<string>& results, size_t index) {
+    if (index == in.size()) {
+        // Check if all floating letters are used by finding any count greater than 0
+        if (std::find_if(floatingCount.begin(), floatingCount.end(), [](int count){ return count > 0; }) == floatingCount.end()) {
+            // If currentWord forms a valid word in dictionary, add to results
+            if (dict.find(currentWord) != dict.end()) {
+                results.insert(currentWord);
+            }
         }
         return;
     }
 
-    if (fixed[pos] != '-') {  // If the position is already fixed
-        current[pos] = fixed[pos];
-        generate(pos + 1, current, fixed, floatingOriginal, floatingRemaining, dict, results);
+    if (in[index] != '-') {
+        // Fixed character, use it
+        currentWord[index] = in[index];
+        generateWords(in, currentWord, floatingCount, dict, results, index + 1);
     } else {
-        // Try all possible letters for this position
-        for (auto& pair : floatingRemaining) {
-            if (pair.second > 0) {  // Only use letters that are still available
-                current[pos] = pair.first;
-                pair.second--;  // Use this letter now
-                generate(pos + 1, current, fixed, floatingOriginal, floatingRemaining, dict, results);
-                pair.second++;  // Backtrack: restore the count
-            }
-        }
-
-        // Also try any letter that is not in floating (could be improved by limiting to a-z)
+        // Try all possible letters from a-z
         for (char c = 'a'; c <= 'z'; ++c) {
-            if (floatingOriginal.find(c) == floatingOriginal.end()) {  // If 'c' is not a floating letter
-                current[pos] = c;
-                generate(pos + 1, current, fixed, floatingOriginal, floatingRemaining, dict, results);
+            currentWord[index] = c;
+            int idx = c - 'a';
+            if (floatingCount[idx] > 0) {
+                floatingCount[idx]--;
+                generateWords(in, currentWord, floatingCount, dict, results, index + 1);
+                floatingCount[idx]++; // Backtrack
+            } else if (std::find(in.begin(), in.end(), c) == in.end()) { // Check if it is not part of fixed characters
+                generateWords(in, currentWord, floatingCount, dict, results, index + 1);
             }
         }
     }
 }
 
-#ifndef RECCHECK
-// Example usage
-int main() {
-    // Sample dictionary
-    set<string> dict = {"bind", "dine", "ding", "dins", "dint", "find", "hind", "kind", "mind", "rind", "wind"};
+std::set<std::string> wordle(const std::string& in, const std::string& floating, const std::set<std::string>& dict) {
+    set<string> results;
+    string currentWord = in;
+    vector<int> floatingCount(26, 0);
 
-    // Test case
-    set<string> results = wordle("-i--", "dn", dict);
-
-    // Print results
-    for (const string& word : results) {
-        cout << word << endl;
+    for (char c : floating) {
+        floatingCount[c - 'a']++;
     }
 
-    return 0;
+    generateWords(in, currentWord, floatingCount, dict, results, 0);
+    return results;
 }
-#endif

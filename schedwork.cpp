@@ -1,102 +1,59 @@
-#include <iostream>
+#ifndef RECCHECK
 #include <set>
+#include <iostream>
+#include <fstream>
+#include <string>
 #include <vector>
 #include <map>
 #include <algorithm>
+#include <functional> // Include for std::function
+#endif
+
+#include "schedwork.h"
 
 using namespace std;
 
-// Define the worker type and schedule data structures
-typedef unsigned int Worker_T;
-typedef vector<vector<bool>> AvailabilityMatrix;
-typedef vector<vector<Worker_T>> DailySchedule;
+static const Worker_T INVALID_ID = (unsigned int)-1; // Make sure this is declared in the appropriate scope
 
-static const Worker_T INVALID_ID = (unsigned int)-1;
-
-// Prototypes for helper functions
-bool canPlaceWorker(int day, Worker_T worker, const vector<int>& workerShifts, const AvailabilityMatrix& avail, const size_t maxShifts);
-bool scheduleDay(int day, vector<int>& workerShifts, const AvailabilityMatrix& avail, const size_t dailyNeed, const size_t maxShifts, DailySchedule& sched);
-
-// Main scheduling function
-bool schedule(const AvailabilityMatrix& avail, const size_t dailyNeed, const size_t maxShifts, DailySchedule& sched) {
-    if(avail.empty() || avail[0].empty()) return false;
-
-    size_t n = avail.size(); // Number of days
-    size_t k = avail[0].size(); // Number of workers
-
-    // Initialize the schedule and worker shift count
-    sched = DailySchedule(n, vector<Worker_T>(dailyNeed, INVALID_ID));
-    vector<int> workerShifts(k, 0);
-
-    // Start recursive scheduling from the first day
-    return scheduleDay(0, workerShifts, avail, dailyNeed, maxShifts, sched);
-}
-
-// Recursive function to schedule each day
-bool scheduleDay(int day, vector<int>& workerShifts, const AvailabilityMatrix& avail, const size_t dailyNeed, const size_t maxShifts, DailySchedule& sched) {
-    if (day == sched.size()) {
-        return true; // All days scheduled successfully
+bool scheduleWorkers(size_t day, const AvailabilityMatrix& avail, size_t dailyNeed, size_t maxShifts, vector<int>& shifts, DailySchedule& sched, size_t n, size_t k) {
+    if (day == n) {
+        return true; // Base case: All days are scheduled
     }
 
-    vector<Worker_T> &todaySchedule = sched[day];
-    size_t k = avail[day].size();
+    vector<Worker_T> possibleWorkers;
+    for (Worker_T i = 0; i < k; ++i) {
+        if (avail[day][i] && shifts[i] < maxShifts) {
+            possibleWorkers.push_back(i);
+        }
+    }
 
-    // Try to place each worker in today's schedule
-    function<bool(int)> placeNextWorker = [&](int index) -> bool {
+    function<bool(size_t, size_t)> dfs = [&](size_t index, size_t start) {
         if (index == dailyNeed) {
-            // All needed workers placed for today, move to the next day
-            return scheduleDay(day + 1, workerShifts, avail, dailyNeed, maxShifts, sched);
+            sched[day] = possibleWorkers; // Assuming this assignment is meant to capture the state at this point
+            return scheduleWorkers(day + 1, avail, dailyNeed, maxShifts, shifts, sched, n, k);
         }
 
-        for (Worker_T worker = 0; worker < k; ++worker) {
-            if (canPlaceWorker(day, worker, workerShifts, avail, maxShifts)) {
-                // Place the worker
-                todaySchedule[index] = worker;
-                workerShifts[worker]++;
-                
-                // Recur to place the next worker
-                if (placeNextWorker(index + 1)) {
-                    return true;
-                }
-                
-                // Backtrack
-                workerShifts[worker]--;
+        for (size_t i = start; i < possibleWorkers.size(); ++i) {
+            Worker_T worker = possibleWorkers[i];
+            shifts[worker]++;
+            if (dfs(index + 1, i + 1)) {
+                return true;
             }
+            shifts[worker]--;
         }
         return false;
     };
 
-    return placeNextWorker(0);
+    return dfs(0, 0);
 }
 
-// Helper function to check if a worker can be placed on a given day
-bool canPlaceWorker(int day, Worker_T worker, const vector<int>& workerShifts, const AvailabilityMatrix& avail, const size_t maxShifts) {
-    return avail[day][worker] && workerShifts[worker] < maxShifts;
+bool schedule(const AvailabilityMatrix& avail, size_t dailyNeed, size_t maxShifts, DailySchedule& sched) {
+    if (avail.empty()) return false;
+    
+    size_t n = avail.size();
+    size_t k = avail[0].size();
+    sched.resize(n, vector<Worker_T>(dailyNeed, INVALID_ID));
+    vector<int> shifts(k, 0);
+
+    return scheduleWorkers(0, avail, dailyNeed, maxShifts, shifts, sched, n, k);
 }
-
-#ifndef RECCHECK
-int main() {
-    AvailabilityMatrix avail = {
-        {true, true, true, true},
-        {true, false, true, false},
-        {true, true, false, true},
-        {true, false, false, true}
-    };
-    size_t dailyNeed = 2;
-    size_t maxShifts = 2;
-    DailySchedule sched;
-
-    if (schedule(avail, dailyNeed, maxShifts, sched)) {
-        for (const auto& day : sched) {
-            for (Worker_T worker : day) {
-                cout << worker << " ";
-            }
-            cout << endl;
-        }
-    } else {
-        cout << "No valid schedule found." << endl;
-    }
-
-    return 0;
-}
-#endif
